@@ -1,0 +1,499 @@
+:root {
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    sans-serif;
+  color: #233b39;
+  background: #f7f9f8;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button,
+a,
+select {
+  cursor: pointer;
+}
+button {
+  border: 1px solid #dce5e1;
+  border-radius: 8px;
+  background: white;
+  padding: 10px 16px;
+  color: inherit;
+}
+button:hover {
+  background: #edf5f1;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.primary {
+  background: #176d5a;
+  border: 0;
+  color: white;
+  padding: 13px 22px;
+}
+.primary:hover {
+  background: #125441;
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+h1 {
+  font-size: 34px;
+  letter-spacing: -1px;
+}
+h2 {
+  font-size: 27px;
+}
+.muted,
+.hint {
+  color: #788983;
+  line-height: 1.8;
+}
+.hint {
+  font-size: 12px;
+  margin-top: 18px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #649287;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 14px;
+}
+.brand {
+  font-size: 23px;
+  font-weight: 750;
+  letter-spacing: -1px;
+  white-space: nowrap;
+}
+.brand span {
+  font-size: 10px;
+  letter-spacing: 1px;
+  margin-left: 7px;
+  padding: 3px;
+  border: 1px solid #72978d;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+.login {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  min-height: 100vh;
+}
+.intro {
+  background: #143f37;
+  color: #f4faf6;
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+.intro:after {
+  content: "";
+  width: 420px;
+  height: 420px;
+  border: 1px solid #ffffff12;
+  border-radius: 50%;
+  position: absolute;
+  right: -160px;
+  bottom: 70px;
+  box-shadow:
+    0 0 0 60px #ffffff04,
+    0 0 0 120px #ffffff03;
+  pointer-events: none;
+}
+.intro h1 {
+  font-size: 52px;
+  line-height: 1.4;
+}
+.intro p {
+  line-height: 2;
+  color: #a6c6ba;
+}
+.intro small {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #8cad9f;
+}
+.signin {
+  display: grid;
+  place-items: center;
+  padding: 45px;
+}
+.signin form {
+  width: min(360px, 100%);
+}
+label {
+  display: block;
+  font-size: 13px;
+  margin: 24px 0 12px;
+}
+input {
+  display: block;
+  width: 100%;
+  padding: 13px 14px;
+  margin-top: 10px;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  background: white;
+}
+input:focus {
+  outline: 2px solid #92b9ab;
+}
+.signin .primary {
+  width: 100%;
+  margin-top: 15px;
+}
+.error {
+  padding: 14px;
+  background: #fff0ec;
+  color: #994631;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+aside {
+  width: 244px;
+  flex-shrink: 0;
+  background: #fff;
+  border-right: 1px solid #e4ebe6;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.nav-label {
+  font-size: 11px;
+  color: #91a29a;
+  margin: 58px 12px 16px;
+}
+.nav-item {
+  background: #eaf4ee;
+  color: #176d5a;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.aside-bottom {
+  margin-top: auto;
+  border-top: 1px solid #edf0ee;
+  padding-top: 24px;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+}
+.aside-bottom small {
+  color: #8a9892;
+}
+.avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e3eee7;
+  display: grid;
+  place-items: center;
+  color: #36705b;
+}
+.workspace {
+  width: 100%;
+  padding: 0 48px 32px;
+  max-width: 1550px;
+}
+header {
+  height: 85px;
+  border-bottom: 1px solid #e4ebe6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #899991;
+}
+header b {
+  color: #415d50;
+  font-weight: 500;
+}
+.badge {
+  border: 1px solid #d9e4dc;
+  border-radius: 18px;
+  padding: 5px 10px;
+  font-size: 10px;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 42px 0 26px;
+}
+.heading h1 {
+  margin-bottom: 12px;
+}
+.heading p {
+  font-size: 14px;
+  margin: 0;
+}
+.class-banner {
+  border: 1px solid #dbe8df;
+  background: #eff6f1;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.class-icon {
+  font-size: 30px;
+  color: #3c7962;
+  background: white;
+  padding: 10px;
+  border-radius: 10px;
+}
+.class-banner small {
+  display: block;
+  font-size: 11px;
+  color: #6c8b78;
+  margin-bottom: 6px;
+}
+.class-banner select {
+  border: 0;
+  background: transparent;
+  font-weight: 650;
+  color: #254f3c;
+  font-size: 18px;
+}
+.class-banner > span {
+  margin-left: auto;
+  color: #7c9987;
+  font-size: 12px;
+}
+.list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 36px 0 22px;
+}
+.list-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.list-head small {
+  background: #e8eee9;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  color: #79917f;
+}
+.list-head button {
+  font-size: 12px;
+}
+.materials {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+  gap: 20px;
+}
+.material {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  border-color: #e1e8e2;
+  min-height: 215px;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+.material:hover {
+  background: white;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px #143f370b;
+}
+.file-icon {
+  font-size: 10px;
+  letter-spacing: 1px;
+  width: 42px;
+  height: 48px;
+  background: #eaf3ec;
+  color: #35734f;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+.material strong {
+  font-size: 15px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.material > .muted {
+  font-size: 11px;
+}
+.material footer {
+  border-top: 1px solid #eef2ee;
+  margin-top: 18px;
+  padding-top: 15px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  color: #90a195;
+  font-size: 10px;
+}
+.material footer span {
+  color: #477f60;
+}
+.footnote {
+  font-size: 11px;
+  color: #96a69b;
+  text-align: center;
+  margin-top: 42px;
+}
+.empty {
+  padding: 65px;
+  text-align: center;
+  color: #8c9e92;
+  background: #fff;
+  border: 1px dashed #d7e1d9;
+  border-radius: 10px;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: #122f2866;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 5;
+}
+.modal {
+  background: white;
+  width: min(680px, 100%);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 36px;
+  border-radius: 15px;
+  position: relative;
+}
+.close {
+  position: absolute;
+  right: 16px;
+  top: 14px;
+  border: 0;
+  font-size: 24px;
+  padding: 2px 10px;
+}
+.modal h2 {
+  padding-right: 25px;
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+.modal pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f5f8f5;
+  padding: 24px;
+  font: 14px/1.9 inherit;
+  border-radius: 8px;
+}
+.download {
+  color: #176d5a;
+}
+.drop {
+  border: 1px dashed #a9c5b4;
+  padding: 25px;
+  border-radius: 10px;
+  background: #f4f9f5;
+}
+.loading {
+  padding: 20vh;
+  text-align: center;
+  color: #648275;
+}
+@media (max-width: 800px) {
+  .login {
+    grid-template-columns: 1fr;
+  }
+  .intro {
+    padding: 30px;
+    min-height: 300px;
+    gap: 30px;
+  }
+  .intro h1 {
+    font-size: 32px;
+  }
+  .intro small {
+    display: none;
+  }
+  .signin {
+    padding: 40px 25px;
+  }
+  aside {
+    width: 80px;
+    padding: 24px 10px;
+  }
+  .brand {
+    font-size: 0;
+  }
+  .brand:first-letter {
+    font-size: 24px;
+  }
+  .brand span {
+    font-size: 9px;
+  }
+  .nav-label,
+  .nav-item {
+    font-size: 11px;
+    padding: 8px;
+  }
+  .aside-bottom {
+    font-size: 10px;
+  }
+  .aside-bottom button {
+    padding: 6px;
+  }
+  .workspace {
+    padding: 0 20px;
+  }
+  .heading {
+    align-items: flex-start;
+    gap: 15px;
+  }
+  .heading h1 {
+    font-size: 27px;
+  }
+  .heading .primary {
+    font-size: 12px;
+    white-space: nowrap;
+    padding: 12px;
+  }
+  .class-banner > span {
+    display: none;
+  }
+  .class-banner {
+    padding: 16px;
+  }
+}
