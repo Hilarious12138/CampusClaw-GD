@@ -4,94 +4,174 @@ import {
   request,
   type APIRequestContext,
 } from "@playwright/test";
-let a: APIRequestContext, b: APIRequestContext, s: APIRequestContext;
-let ca: string, cb: string, csrf: string, uploaded: string;
+import { createHmac } from "node:crypto";
+let a: APIRequestContext,
+  b: APIRequestContext,
+  s: APIRequestContext,
+  ca: string,
+  cb: string,
+  uploaded: string;
+async function login(c: APIRequestContext, username: string, key: string) {
+  const r = await c.post("/api/auth/login", {
+    data: { username, password: process.env[key] },
+  });
+  expect(r.status()).toBe(200);
+  const data = await r.json();
+  expect(data.token_type).toBe("Bearer");
+  expect(data.expires_in).toBe(1800);
+  expect(JSON.stringify(data.user)).not.toContain("password");
+  authTokens.set(c, data.access_token);
+  return data;
+}
+const authTokens = new WeakMap<APIRequestContext, string>();
+async function client() {
+  const raw = await request.newContext({
+    baseURL: process.env.APP_ORIGIN,
+    extraHTTPHeaders: { Origin: process.env.APP_ORIGIN! },
+  });
+  const wrapped: APIRequestContext = new Proxy(raw, {
+    get(target, key) {
+      if (key === "get" || key === "post")
+        return (
+          url: string,
+          options: Parameters<APIRequestContext["get"]>[1] = {},
+        ) =>
+          target[key](url, {
+            ...options,
+            headers: {
+              ...(authTokens.has(wrapped)
+                ? { Authorization: `Bearer ${authTokens.get(wrapped)}` }
+                : {}),
+              ...options.headers,
+            },
+          });
+      const value = Reflect.get(target, key);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return wrapped;
+}
 test.beforeAll(async () => {
-  async function login(username: string, key: string) {
-    const c = await request.newContext({
-      baseURL: process.env.APP_ORIGIN,
-      extraHTTPHeaders: { Origin: process.env.APP_ORIGIN! },
-    });
-    expect(
-      (
-        await c.post("/api/auth/login", {
-          data: { username, password: process.env[key] },
-        })
-      ).status(),
-    ).toBe(200);
-    return c;
-  }
-  a = await login("teacher_a", "SEED_TEACHER_A_PASSWORD");
-  b = await login("teacher_b", "SEED_TEACHER_B_PASSWORD");
-  s = await login("student_a", "SEED_STUDENT_A_PASSWORD");
-  const me = await (await a.get("/api/me")).json();
-  ca = me.classes[0].id;
-  csrf = me.csrfToken;
-  cb = (await (await b.get("/api/me")).json()).classes[0].id;
+  a = await client();
+  b = await client();
+  s = await client();
+  ca = (await login(a, "teacher_a", "SEED_TEACHER_A_PASSWORD")).user.classes[0]
+    .id;
+  cb = (await login(b, "teacher_b", "SEED_TEACHER_B_PASSWORD")).user.classes[0]
+    .id;
+  await login(s, "student_a", "SEED_STUDENT_A_PASSWORD");
 });
 test.afterAll(async () => {
   await Promise.all([a?.dispose(), b?.dispose(), s?.dispose()]);
 });
-test("匿名访问与错误密码", async ({ request: r }) => {
+test("无 Bearer、Cookie、URL 凭证不能认证", async ({ request: r }) => {
   expect((await r.get("/api/me")).status()).toBe(401);
-  expect((await r.get("/", { maxRedirects: 0 })).status()).toBe(302);
   expect(
     (
-      await r.post("/api/auth/login", {
-        headers: { Origin: process.env.APP_ORIGIN! },
-        data: { username: "teacher_a", password: "incorrect" },
+      await r.get("/api/me", {
+        headers: { Cookie: "campus_session=oldsession" },
       })
     ).status(),
   ).toBe(401);
+  const c = await client();
+  await login(c, "student_a", "SEED_STUDENT_A_PASSWORD");
+  expect((await r.get("/api/me?token=not-a-credential")).status()).toBe(
+    401,
+  );
+  expect(
+    (await c.storageState()).cookies.filter((x) => x.name === "campus_session"),
+  ).toHaveLength(0);
+  await c.dispose();
   expect((await r.get("/health")).status()).toBe(200);
 });
-test("角色、CSRF、服务端班级隔离", async () => {
-  expect((await s.post(`/api/classes/${ca}/materials`)).status()).toBe(403);
-  expect((await a.post(`/api/classes/${ca}/materials`)).status()).toBe(403);
+test("错误登录、过期和篡改 JWT", async () => {
+  const c = await client();
+  expect(
+    (
+      await c.post("/api/auth/login", {
+        data: { username: "teacher_a", password: "wrong" },
+      })
+    ).status(),
+  ).toBe(401);
+  const data = await login(c, "teacher_a", "SEED_TEACHER_A_PASSWORD");
+  const parts = data.access_token.split(".");
+  const body = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+  body.exp = Math.floor(Date.now() / 1000) - 10;
+  const signed =
+    parts[0] + "." + Buffer.from(JSON.stringify(body)).toString("base64url");
+  const expired =
+    signed +
+    "." +
+    createHmac("sha256", process.env.JWT_SECRET!)
+      .update(signed)
+      .digest("base64url");
+  for (const value of [expired, data.access_token + "x"])
+    expect(
+      (
+        await c.get("/api/me", {
+          headers: { Authorization: "Bearer " + value },
+        })
+      ).status(),
+    ).toBe(401);
+  await c.dispose();
+});
+test("退出立即撤销，学生和跨班拒绝", async () => {
+  const c = await client();
+  const data = await login(c, "student_a", "SEED_STUDENT_A_PASSWORD");
+  expect((await c.get("/api/me")).status()).toBe(200);
+  expect((await c.post("/api/auth/logout")).status()).toBe(204);
+  expect(
+    (
+      await c.get("/api/me", {
+        headers: { Authorization: "Bearer " + data.access_token },
+      })
+    ).status(),
+  ).toBe(401);
+  await c.dispose();
+  expect(
+    (
+      await s.post(`/api/classes/${ca}/materials`, {
+        data: { role: "teacher" },
+      })
+    ).status(),
+  ).toBe(403);
   expect((await a.get(`/api/classes/${cb}/materials`)).status()).toBe(404);
+  expect((await a.post(`/api/classes/${cb}/materials`)).status()).toBe(404);
   const bm = (await (await b.get(`/api/classes/${cb}/materials`)).json())
     .materials[0].id;
-  for (const suffix of ["", "/file"])
-    expect(
-      (await a.get(`/api/classes/${cb}/materials/${bm}${suffix}`)).status(),
-    ).toBe(404);
+  expect((await a.get(`/api/classes/${ca}/materials/${bm}`)).status()).toBe(
+    404,
+  );
 });
-test("上传真实入库、正文与受保护下载", async () => {
-  const body = "# 验证材料\n课堂学习记录";
-  const r = await a.post(`/api/classes/${ca}/materials`, {
-    headers: { "X-CSRF-Token": csrf },
+test("上传及 Bearer 下载，匿名/跨班下载拒绝", async ({ request: r }) => {
+  const body = "# JWT 验收\n真实原文";
+  const response = await a.post(`/api/classes/${ca}/materials`, {
     multipart: {
       file: {
-        name: "迭代验收.md",
+        name: "JWT验收.md",
         mimeType: "text/markdown",
         buffer: Buffer.from(body),
       },
     },
   });
-  expect(r.status()).toBe(201);
-  uploaded = (await r.json()).id;
-  expect(
-    (await (await s.get(`/api/classes/${ca}/materials`)).json()).materials.some(
-      (m: { id: string }) => m.id === uploaded,
-    ),
-  ).toBeTruthy();
-  expect(
-    (await (await s.get(`/api/classes/${ca}/materials/${uploaded}`)).json())
-      .body,
-  ).toBe(body);
-  expect(
-    await (await s.get(`/api/classes/${ca}/materials/${uploaded}/file`)).text(),
-  ).toBe(body);
-  expect(
-    (await b.get(`/api/classes/${ca}/materials/${uploaded}/file`)).status(),
-  ).toBe(404);
-  expect((await a.get("/uploads/迭代验收.md")).status()).toBe(404);
+  expect(response.status()).toBe(201);
+  uploaded = (await response.json()).id;
+  const url = `/api/classes/${ca}/materials/${uploaded}/file`;
+  expect(await (await s.get(url)).text()).toBe(body);
+  expect((await r.get(url)).status()).toBe(401);
+  expect((await b.get(url)).status()).toBe(404);
+  expect((await a.get("/uploads/JWT验收.md")).status()).toBe(404);
 });
-test("拒绝无效文件，失败不新增记录", async () => {
+test("文件失败不新增记录，写操作来源校验", async () => {
   const url = `/api/classes/${ca}/materials`;
-  const before = (await (await a.get(url)).json()).materials.length;
+  const count = (await (await a.get(url)).json()).materials.length;
+  expect(
+    (
+      await a.post(url, { headers: { Origin: "https://invalid.example" } })
+    ).status(),
+  ).toBe(403);
   for (const [name, buffer, status] of [
-    ["empty.txt", Buffer.from("  "), 422],
+    ["empty.txt", Buffer.from(" "), 422],
     ["binary.txt", Buffer.from([255]), 415],
     ["a.pdf", Buffer.from("pdf"), 415],
     ["large.txt", Buffer.alloc(10 * 1024 * 1024 + 1, 65), 413],
@@ -99,7 +179,6 @@ test("拒绝无效文件，失败不新增记录", async () => {
     expect(
       (
         await a.post(url, {
-          headers: { "X-CSRF-Token": csrf },
           multipart: {
             file: { name, mimeType: "application/octet-stream", buffer },
           },
@@ -107,75 +186,75 @@ test("拒绝无效文件，失败不新增记录", async () => {
       ).status(),
     ).toBe(status);
   }
-  expect((await (await a.get(url)).json()).materials.length).toBe(before);
+  expect((await (await a.get(url)).json()).materials.length).toBe(count);
 });
-test("浏览器登录、刷新与退出", async ({ page }) => {
+test("浏览器 Bearer、下载、刷新退出且没有 me 轮询", async ({ page }) => {
+  const calls: string[] = [];
+  page.on("request", (r) => calls.push(r.url()));
   await page.goto("/");
   await expect(page).toHaveURL(/login/);
-  await page.getByLabel("账号", { exact: true }).fill("teacher_a");
+  async function signIn() {
+    await page.getByLabel("账号", { exact: true }).fill("teacher_a");
+    await page
+      .getByLabel("密码", { exact: true })
+      .fill(process.env.SEED_TEACHER_A_PASSWORD!);
+    await page.getByRole("button", { name: "登录 →" }).click();
+    await expect(
+      page.getByRole("heading", { name: "班级知识库" }),
+    ).toBeVisible();
+  }
+  const materialRequest = page.waitForRequest((r) =>
+    r.url().endsWith("/materials"),
+  );
+  await signIn();
+  expect((await materialRequest).headers()["authorization"]).toMatch(
+    /^Bearer /,
+  );
+  expect(
+    await page.evaluate(() => localStorage.length + sessionStorage.length),
+  ).toBe(0);
   await page
-    .getByLabel("密码", { exact: true })
-    .fill(process.env.SEED_TEACHER_A_PASSWORD!);
-  await page.getByRole("button", { name: "登录 →" }).click();
-  await expect(page.getByRole("heading", { name: "班级知识库" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /上传材料/ })).toBeVisible();
+    .getByRole("button", { name: /JWT验收.md/ })
+    .first()
+    .click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载原文件 ↓" }).click();
+  expect((await download).suggestedFilename()).toBe("JWT验收.md");
   await page.reload();
   await expect(
-    page.getByText("迭代验收.md", { exact: true }).first(),
+    page.getByRole("heading", { name: "登录教学空间" }),
   ).toBeVisible();
-  await page.screenshot({ path: "test-results/workspace.png", fullPage: true });
+  await signIn();
+  await page.clock.install();
+  await page.clock.fastForward(11000);
+  expect(calls.filter((u) => u.endsWith("/api/me"))).toHaveLength(0);
   await page.getByRole("button", { name: "退出登录" }).click();
   await expect(
     page.getByRole("heading", { name: "登录教学空间" }),
   ).toBeVisible();
 });
-test("会话轮换、退出失效和伪造角色无效", async () => {
-  const c = await request.newContext({
-    baseURL: process.env.APP_ORIGIN,
-    extraHTTPHeaders: { Origin: process.env.APP_ORIGIN! },
+test("退出后延迟材料响应不回填", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("账号", { exact: true }).fill("teacher_a");
+  await page
+    .getByLabel("密码", { exact: true })
+    .fill(process.env.SEED_TEACHER_A_PASSWORD!);
+  await page.getByRole("button", { name: "登录 →" }).click();
+  await expect(
+    page.getByRole("button", { name: /JWT验收.md/ }).first(),
+  ).toBeVisible();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route("**/materials", async (route) => {
+    const response = await route.fetch();
+    await gate;
+    await route.fulfill({ response }).catch(() => {});
   });
-  const credentials = {
-    username: "student_a",
-    password: process.env.SEED_STUDENT_A_PASSWORD,
-    role: "teacher",
-  };
-  await c.post("/api/auth/login", { data: credentials });
-  const old = (await c.storageState()).cookies[0];
-  expect(old.httpOnly).toBeTruthy();
-  expect(old.sameSite).toBe("Lax");
-  expect(old.expires - Date.now() / 1000).toBeGreaterThan(28000);
-  await c.post("/api/auth/login", { data: credentials });
-  const fresh = (await c.storageState()).cookies[0];
-  expect(fresh.value).not.toBe(old.value);
-  const stale = await request.newContext({
-    baseURL: process.env.APP_ORIGIN,
-    extraHTTPHeaders: { Cookie: `${old.name}=${old.value}` },
-  });
-  expect((await stale.get("/api/me")).status()).toBe(401);
-  const me = await (await c.get("/api/me")).json();
-  expect(me.role).toBe("student");
-  expect(JSON.stringify(me)).not.toContain("password");
-  expect(
-    (
-      await c.post(`/api/classes/${ca}/materials`, {
-        data: { role: "teacher" },
-      })
-    ).status(),
-  ).toBe(403);
-  expect(
-    (
-      await c.post("/api/auth/logout", {
-        headers: { "X-CSRF-Token": me.csrfToken },
-      })
-    ).status(),
-  ).toBe(204);
-  expect((await c.get("/api/me")).status()).toBe(401);
-  await c.dispose();
-  await stale.dispose();
-});
-
-test("混用班级路径与材料 ID、教师跨班上传", async () => {
- const bm=(await (await b.get(`/api/classes/${cb}/materials`)).json()).materials[0].id;
- expect((await a.get(`/api/classes/${ca}/materials/${bm}`)).status()).toBe(404);
- expect((await a.post(`/api/classes/${cb}/materials`,{headers:{"X-CSRF-Token":csrf}})).status()).toBe(404);
+  await page.getByRole("button", { name: "↻ 刷新列表" }).click();
+  await page.getByRole("button", { name: "退出登录" }).click();
+  release();
+  await expect(
+    page.getByRole("heading", { name: "登录教学空间" }),
+  ).toBeVisible();
+  await expect(page.locator(".material")).toHaveCount(0);
 });

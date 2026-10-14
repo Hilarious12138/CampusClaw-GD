@@ -11,7 +11,7 @@ const values = {
   MYSQL_USER: "campusclaw",
   MYSQL_PASSWORD: secret(),
   MYSQL_ROOT_PASSWORD: secret(),
-  SESSION_SECRET: secret(),
+  JWT_SECRET: secret(),
   SEED_TEACHER_A_PASSWORD: secret(),
   SEED_STUDENT_A_PASSWORD: secret(),
   SEED_TEACHER_B_PASSWORD: secret(),
@@ -19,7 +19,6 @@ const values = {
   WEB_PORT: port,
   APP_ORIGIN: `http://127.0.0.1:${port}`,
   DEV_ORIGIN: "http://127.0.0.1:5173",
-  COOKIE_SECURE: "false",
 };
 writeFileSync(
   ".env",

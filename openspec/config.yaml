@@ -1,13 +1,14 @@
 schema: spec-driven
 context: |
-  CampusClaw-GD；第 3 课实现保留于 changes/establish-campus-knowledge-access，尚未归档。
-  当前 change：add-traceable-vector-retrieval，仅文档规划，禁止 Apply；收到明确开发授权后才实施。
+  CampusClaw-GD；第 3 课实现保留于 changes/establish-campus-knowledge-access,尚未归档。
+  当前认证 change：replace-session-with-bearer-jwt 已授权实施；add-traceable-vector-retrieval 已获用户授权实施（2026-09-30）。
   技术栈：React 18 + TypeScript + Vite；Go net/http；MySQL 8.0；Nginx + Compose。
-  新规划：MySQL knowledge_chunks 存正文，Qdrant 存向量和标识；嵌入与对话课程网关的具体配置待提供。
+  本次实现：MySQL knowledge_chunks 存正文，Qdrant 存向量和标识；嵌入 course-embedding、2048 维、课程 /v1 网关嵌入实测通过；对话 course-chat 使用同一网关与凭证，密钥仅本机 .env。
   浏览器只用同源 /api→Nginx→Go；MySQL、Qdrant、嵌入服务仅由后端访问，密钥仅服务端环境变量。
-  登录、角色、上传及文件鉴权复用；检索班级只取认证后的会话 class_id，不信任客户端班级编号。
-  三模式 keyword/vector/hybrid，默认 hybrid；无依据返回空 hits/citations 且不调用生成；有依据才做非流式简短问答并校验引用。
-  已核对用户指定第 4 课网站全部章节；原 week04 spec 未取得。支持 auto 800/80、custom、hierarchy 及教师重建；不做流式/长对话、作业、注册或额外文件解析。
+  登录、角色、上传及文件鉴权复用；检索班级只取JWT 验证后从数据库成员关系解析的 class_id，不信任客户端班级编号。
+  第四课三模式 keyword/vector/hybrid，默认 hybrid；第四课 /api/ask 无依据不调用生成。第五课流式会话无依据仍调用模型，但 citations 为空且去除虚构引用编号。
+  已核对用户指定第 4 课网站全部章节；原 week04 spec 未取得。支持 auto 800/80、custom、hierarchy 及教师重建；第 4 课不做流式/长对话、作业、注册或额外文件解析。
+  第 5 课 add-guided-streaming-conversations 已获用户授权实施（2026-10-14）：教师维护多个本班智能体及其提示词、技能/材料绑定；个人流式会话、Swagger 和 apitest；不扩展笔记/收藏。
   按需只读当前变更和相关旧规约，正文中文，保留英文 OpenSpec 骨架，不增加重复文档。
 rules:
   proposal:

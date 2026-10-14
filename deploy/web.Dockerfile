@@ -5,6 +5,7 @@ RUN npm ci --no-audit --no-fund
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 COPY public ./public
+COPY scripts/prepare-swagger.mjs ./scripts/prepare-swagger.mjs
 RUN npm run build
 FROM nginx:1.28-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf

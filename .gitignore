@@ -10,3 +10,12 @@ test-results/
 
 # Local verification evidence
 evidence/
+
+# Generated API reports and Swagger vendor bundle
+apitest/reports/
+apitest/.venv/
+__pycache__/
+*.pyc
+public/swagger/swagger-ui.css
+public/swagger/swagger-ui-bundle.js
+public/swagger/LICENSE

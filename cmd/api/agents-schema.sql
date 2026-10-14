@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS tutor_agents (
+ id CHAR(32) PRIMARY KEY, class_id CHAR(32) NOT NULL, name VARCHAR(64) NOT NULL,
+ prompt TEXT NOT NULL, enabled BOOLEAN NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+ UNIQUE KEY(class_id,name), FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS tutor_agent_skills (
+ agent_id CHAR(32) NOT NULL, skill_id CHAR(32) NOT NULL, PRIMARY KEY(agent_id,skill_id),
+ FOREIGN KEY(agent_id) REFERENCES tutor_agents(id) ON DELETE CASCADE,
+ FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS tutor_agent_materials (
+ agent_id CHAR(32) NOT NULL, material_id CHAR(32) NOT NULL, PRIMARY KEY(agent_id,material_id),
+ FOREIGN KEY(agent_id) REFERENCES tutor_agents(id) ON DELETE CASCADE,
+ FOREIGN KEY(material_id) REFERENCES materials(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

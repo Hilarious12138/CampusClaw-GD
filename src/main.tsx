@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { Conversations } from "./Conversations";
+import { readEvents } from "./sse";
+import { Retrieval, Strategy, Reindex, defaults } from "./Retrieval";
 type Class = { id: string; name: string };
 type User = {
   displayName: string;
   role: string;
-  csrfToken: string;
   classes: Class[];
 };
 type Material = {
@@ -16,8 +18,31 @@ type Material = {
   uploaderName: string;
   createdAt: string;
   body?: string;
+  index_state: string;
+  index_error: string;
 };
 function App() {
+  const [view,setView]=useState("knowledge");
+  const entryLink = useRef(new URLSearchParams(location.search));
+  const [chunkOptions, setChunkOptions] = useState(defaults);
+  const accessToken = useRef("");
+  const generation = useRef(0);
+  const pending = useRef(new Set<AbortController>());
+  const [expiresAt, setExpiresAt] = useState(0);
+  function clearAuth() {
+    generation.current++;
+    for (const c of pending.current) c.abort();
+    pending.current.clear();
+    accessToken.current = "";
+    setExpiresAt(0);
+    setUser(null);
+    setCid("");
+    setItems([]);
+    setDetail(null);
+    setUpload(false);
+    history.replaceState(null, "", "/login");
+  }
+
   const [user, setUser] = useState<User | null>(null),
     [cid, setCid] = useState(""),
     [items, setItems] = useState<Material[]>([]),
@@ -26,74 +51,96 @@ function App() {
     [busy, setBusy] = useState(false),
     [ready, setReady] = useState(false),
     [upload, setUpload] = useState(false);
-  async function api(path: string, options: RequestInit = {}) {
+  async function api(path: string, options: RequestInit = {}, binary = false) {
+    const epoch = generation.current;
+    const controller = new AbortController();
+    pending.current.add(controller);
+    const headers = new Headers(options.headers);
+    if (accessToken.current)
+      headers.set("Authorization", `Bearer ${accessToken.current}`);
     const r = await fetch(path, {
       ...options,
-      credentials: "same-origin",
+      credentials: "omit",
+      headers,
+      signal: controller.signal,
       cache: "no-store",
-    }).catch(() => {
-      setItems([]);
-      setDetail(null);
-      throw Error("无法连接服务，请稍后刷新。");
-    });
-    if (!r.ok) {
-      if (r.status === 401) {
-        setUser(null);
+    })
+      .catch(() => {
+        if (epoch !== generation.current) throw Error("请求已取消。");
         setItems([]);
         setDetail(null);
-        history.replaceState(null, "", "/login");
+        throw Error("无法连接服务，请稍后刷新。");
+      })
+      .finally(() => pending.current.delete(controller));
+    if (epoch !== generation.current) throw Error("请求已取消。");
+    if (!r.ok) {
+      if (r.status === 401) {
+        clearAuth();
       }
       if (r.status >= 500) {
         setItems([]);
         setDetail(null);
       }
       const b = await r.json().catch(() => null);
-      throw Error(b?.error?.message || "服务暂时不可用，请稍后刷新。");
+      throw Object.assign(
+        Error(b?.error?.message || "服务暂时不可用，请稍后刷新。"),
+        { hits: b?.hits },
+      );
     }
-    return r.status === 204 ? null : r.json();
+    const body =
+      r.status === 204 ? null : binary ? await r.blob() : await r.json();
+    if (epoch !== generation.current) throw Error("请求已取消。");
+    return body;
   }
-  async function me() {
-    const u: User = await api("/api/me");
-    setUser(u);
-    setCid(u.classes[0]?.id || "");
-    history.replaceState(null, "", "/");
-    return u;
+  async function streamAPI(path:string, body:unknown, controller:AbortController, onEvent:(name:string,data:any)=>void) {
+    const epoch=generation.current;pending.current.add(controller);
+    try {
+      const r=await fetch(path,{method:"POST",credentials:"omit",cache:"no-store",headers:{"Content-Type":"application/json",Authorization:`Bearer ${accessToken.current}`},body:JSON.stringify(body),signal:controller.signal});
+      if(epoch!==generation.current)throw Error("请求已取消。");
+      if(!r.ok){if(r.status===401)clearAuth();const b=await r.json().catch(()=>null);throw Error(b?.error?.message||"流式服务暂时不可用。");}
+      await readEvents(r,(name,data)=>{if(epoch===generation.current)onEvent(name,data)});
+    } finally {pending.current.delete(controller)}
   }
   async function list(id = cid) {
     const data = await api(`/api/classes/${id}/materials`);
     setItems(data.materials);
   }
   useEffect(() => {
-    me()
-      .catch((e) => {
-        if (e.message !== "请先登录。") setError(e.message);
-      })
-      .finally(() => setReady(true));
+    history.replaceState(null, "", "/login");
+    setReady(true);
   }, []);
+  useEffect(() => {
+    if (!expiresAt) return;
+    const timer = setTimeout(
+      () => {
+        clearAuth();
+        setError("登录已过期，请重新登录。");
+      },
+      Math.max(0, expiresAt - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [expiresAt]);
   useEffect(() => {
     setItems([]);
     setDetail(null);
     if (cid) list(cid).catch((e) => setError(e.message));
   }, [cid]);
-  useEffect(() => {
-    if (!user) return;
-    const timer = setInterval(() => {
-      api("/api/me").catch((e) => setError(e.message));
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [user]);
   async function login(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
     try {
-      await api("/api/auth/login", {
+      const result = await api("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Object.fromEntries(f)),
       });
-      await me();
+      accessToken.current = result.access_token;
+      setExpiresAt(Date.now() + result.expires_in * 1000);
+      setUser(result.user);
+      setCid(result.user.classes[0]?.id || "");
+      history.replaceState(null, "", "/");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -105,11 +152,13 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      await api(`/api/classes/${cid}/materials`, {
-        method: "POST",
-        headers: { "X-CSRF-Token": user!.csrfToken },
-        body: new FormData(e.currentTarget),
-      });
+      await api(
+        `/api/classes/${cid}/materials?options=${encodeURIComponent(JSON.stringify(chunkOptions))}`,
+        {
+          method: "POST",
+          body: new FormData(e.currentTarget),
+        },
+      );
       await list();
       setUpload(false);
     } catch (e) {
@@ -139,7 +188,7 @@ function App() {
               在这里，共享材料，积累每一份成长。
             </p>
           </div>
-          <small>CAMPUSCLAW · 智能教学平台 / 迭代 01</small>
+          <small>CAMPUSCLAW · 智能教学平台 / 迭代 05</small>
         </section>
         <section className="signin">
           <form onSubmit={login}>
@@ -173,7 +222,7 @@ function App() {
             <button className="primary" disabled={busy}>
               {busy ? "正在登录…" : "登录 →"}
             </button>
-            <p className="hint">账号由管理员预置，暂不开放注册。</p>
+            <p className="hint">账号由管理员预置；刷新页面后需重新登录。</p>
           </form>
         </section>
       </main>
@@ -185,7 +234,9 @@ function App() {
           ◈ CampusClaw<span>GD</span>
         </a>
         <div className="nav-label">教学空间</div>
-        <div className="nav-item">▤　班级知识库</div>
+        <button className="nav-item" onClick={()=>setView("knowledge")}>▤　班级知识库</button>
+        <button className="nav-item" onClick={()=>setView("assistant")}>◇　解题助手</button>
+        <a className="swagger-link" href="/swagger/" target="_blank" rel="noreferrer">接口文档 ↗</a>
         <div className="aside-bottom">
           <div className="avatar">{user.displayName.slice(0, 1)}</div>
           <strong>{user.displayName}</strong>
@@ -195,12 +246,8 @@ function App() {
               try {
                 await api("/api/auth/logout", {
                   method: "POST",
-                  headers: { "X-CSRF-Token": user.csrfToken },
                 });
-                setUser(null);
-                setItems([]);
-                setDetail(null);
-                history.replaceState(null, "", "/login");
+                clearAuth();
               } catch (e) {
                 setError((e as Error).message);
               }
@@ -213,17 +260,17 @@ function App() {
       <main className="workspace">
         <header>
           <span>
-            教学空间 / <b>班级知识库</b>
+            教学空间 / <b>{view === "assistant" ? "解题助手" : "班级知识库"}</b>
           </span>
-          <span className="badge">迭代 01</span>
+          <span className="badge">迭代 05</span>
         </header>
         <section className="heading">
           <div>
-            <span className="eyebrow">CLASS KNOWLEDGE</span>
-            <h1>班级知识库</h1>
-            <p className="muted">让每一份教学材料，都有一个共同的归处。</p>
+            <span className="eyebrow">{view === "assistant" ? "GUIDED LEARNING" : "CLASS KNOWLEDGE"}</span>
+            <h1>{view === "assistant" ? "解题助手" : "班级知识库"}</h1>
+            <p className="muted">{view === "assistant" ? "选择本班智能体，结合材料一步步思考。" : "让每一份教学材料，都有一个共同的归处。"}</p>
           </div>
-          {user.role === "teacher" && (
+          {view !== "assistant" && user.role === "teacher" && (
             <button
               className="primary"
               onClick={() => {
@@ -259,6 +306,19 @@ function App() {
             {error}
           </p>
         )}
+        {view==="assistant"?<Conversations key={cid} api={api} stream={streamAPI} teacher={user.role==="teacher"} classID={cid} openMaterial={async(id)=>{try{setDetail(await api(`/api/classes/${cid}/materials/${id}`))}catch(e){setError((e as Error).message)}}}/>:<>
+        <Retrieval
+          key={cid}
+          initialChunk={entryLink.current.get("chunk") || undefined}
+          api={api}
+          openMaterial={async (id) => {
+            try {
+              setDetail(await api(`/api/classes/${cid}/materials/${id}`));
+            } catch (e) {
+              setError((e as Error).message);
+            }
+          }}
+        />
         <div className="list-head">
           <h3>
             全部材料 <small>{items.length}</small>
@@ -287,6 +347,15 @@ function App() {
             >
               <span className="file-icon">{m.type.toUpperCase()}</span>
               <strong>{m.filename}</strong>
+              <small>
+                索引：
+                {{
+                  ready: "已就绪",
+                  pending: "待处理",
+                  indexing: "处理中",
+                  failed: "失败，可重建",
+                }[m.index_state] || "待处理"}
+              </small>
               <span className="muted">
                 {m.uploaderName} · {(m.sizeBytes / 1024).toFixed(1)} KB
               </span>
@@ -311,6 +380,7 @@ function App() {
             ? "支持上传 UTF-8 TXT / Markdown"
             : "学生可查看和下载材料"}
         </p>
+        </>}
       </main>
       {(upload || detail) && (
         <div className="overlay">
@@ -341,6 +411,7 @@ function App() {
                 <p className="hint">
                   UTF-8 编码 · TXT / Markdown · 最大 10 MiB
                 </p>
+                <Strategy value={chunkOptions} onChange={setChunkOptions} />
                 {error && (
                   <p role="alert" className="error">
                     {error}
@@ -355,13 +426,42 @@ function App() {
                 <>
                   <h2>{detail.filename}</h2>
                   <p className="muted">{detail.uploaderName}</p>
+                  <p>
+                    索引状态：{detail.index_state} {detail.index_error}
+                  </p>
                   <pre>{detail.body}</pre>
-                  <a
+                  {user.role === "teacher" && (
+                    <Reindex
+                      key={detail.id}
+                      api={api}
+                      id={detail.id}
+                      onDone={() =>
+                        void list().catch((e) => setError(e.message))
+                      }
+                    />
+                  )}
+                  <button
                     className="download"
-                    href={`/api/classes/${cid}/materials/${detail.id}/file`}
+                    onClick={async () => {
+                      try {
+                        const blob = await api(
+                          `/api/classes/${cid}/materials/${detail.id}/file`,
+                          {},
+                          true,
+                        );
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = detail.filename;
+                        link.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    }}
                   >
                     下载原文件 ↓
-                  </a>
+                  </button>
                 </>
               )
             )}

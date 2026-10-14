@@ -1,0 +1,3224 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CampusClaw-GD API",
+    "version": "0.5.0",
+    "description": "Bearer JWT；班级/角色查数据库。保留第四课接口，新增教师智能体、技能路由和个人流式会话。Swagger Authorize 只输入 Token，不输入 Bearer 前缀。写请求 Origin 须匹配服务端来源。现有非流式 Nginx 会将502/504映射503；流式路由不拦截，流后错误见error事件。所有ID为本项目hex32或切片UUID，与课程原型数字ID不同。"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "同源 Nginx 入口"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "健康检查（只依赖 MySQL 及基础种子）",
+        "operationId": "get_health",
+        "description": "",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "unavailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "unavailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "账号密码登录",
+        "operationId": "post_api_auth_login",
+        "description": "",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Login"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "username",
+                  "password"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "summary": "撤销当前 JWT",
+        "operationId": "post_api_auth_logout",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "无响应体"
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      }
+    },
+    "/api/me": {
+      "get": {
+        "summary": "读取当前用户与成员班级",
+        "operationId": "get_api_me",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      }
+    },
+    "/api/classes/{classId}/materials": {
+      "get": {
+        "summary": "列出本班材料",
+        "operationId": "get_api_classes_classId_materials",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "class": {
+                      "$ref": "#/components/schemas/Class"
+                    },
+                    "materials": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Material"
+                      }
+                    }
+                  },
+                  "required": [
+                    "class",
+                    "materials"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "知识库"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "classId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "教师上传单个 UTF-8 TXT/MD 文件",
+        "operationId": "post_api_classes_classId_materials",
+        "description": "最大10MiB；201表示原文入库，索引异步完成。options 为 JSON 字符串切片配置。\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{32}$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "上传过大",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "不支持的文件格式/编码",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "无有效正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "classId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "options",
+            "schema": {
+              "type": "string"
+            },
+            "description": "ChunkOptions 的 JSON 编码；省略为 auto。例如 {\"strategy\":\"custom\",\"max_length\":800,\"overlap_ratio\":0.1}。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/classes/{classId}/materials/{id}": {
+      "get": {
+        "summary": "读取本班材料正文",
+        "operationId": "get_api_classes_classId_materials_id",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "知识库"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "classId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/classes/{classId}/materials/{id}/file": {
+      "get": {
+        "summary": "鉴权下载原文件",
+        "operationId": "get_api_classes_classId_materials_id_file",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "知识库"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "classId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/materials/{id}/reindex": {
+      "post": {
+        "summary": "教师显式重建材料索引",
+        "operationId": "post_api_materials_id_reindex",
+        "description": "\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkOptions"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/retrieval/search": {
+      "post": {
+        "summary": "三模式本班检索",
+        "operationId": "post_api_retrieval_search",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Search"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "知识库"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "keyword",
+                      "vector",
+                      "hybrid"
+                    ],
+                    "default": "hybrid"
+                  },
+                  "top_k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "default": 5
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/retrieval/chunks/{id}": {
+      "get": {
+        "summary": "读取可追溯完整切片",
+        "operationId": "get_api_retrieval_chunks_id",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Hit"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "chunk_text": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "chunk_text"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "知识库"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/ask": {
+      "post": {
+        "summary": "第四课单次非流式问答",
+        "operationId": "post_api_ask",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "answer": {
+                      "type": "string"
+                    },
+                    "hits": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Hit"
+                      }
+                    },
+                    "citations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Hit"
+                      }
+                    },
+                    "index_status": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "answer",
+                    "hits",
+                    "citations",
+                    "index_status"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "引用校验失败（Nginx 的既有非流式代理可能映射为503）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "知识库"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "history": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string"
+                        },
+                        "content": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "content"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "question"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompt": {
+      "get": {
+        "summary": "读取本班旧提示词配置",
+        "operationId": "get_api_prompt",
+        "description": "兼容第四课配置。第五课会话按所选智能体的角色提示词生成。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Prompt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      },
+      "put": {
+        "summary": "教师保存本班旧提示词配置",
+        "operationId": "put_api_prompt",
+        "description": "兼容第四课配置。不会更改已有或新建智能体的角色提示词。\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Prompt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Prompt"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/skills": {
+      "get": {
+        "summary": "列出本班技能",
+        "operationId": "get_api_skills",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Skill"
+                      }
+                    }
+                  },
+                  "required": [
+                    "skills"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      },
+      "post": {
+        "summary": "教师创建技能源文本",
+        "operationId": "post_api_skills",
+        "description": "\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Skill"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 8000,
+                    "example": "名称：解题引导\n适用条件：解题,方程\n资料：本班知识库\n工具：knowledge_search\n启用：是\n\n先询问学生已知条件，再提示下一步，不给最终答案。"
+                  }
+                },
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/skills/{id}": {
+      "get": {
+        "summary": "按编号读取本班技能",
+        "operationId": "get_api_skills_id",
+        "description": "他班技能和不存在技能返回相同的404。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Skill"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "教师更新技能（同内容重复提交不新增）",
+        "operationId": "put_api_skills_id",
+        "description": "\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Skill"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "maxLength": 8000
+                  }
+                },
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "教师删除技能（保留历史会话）",
+        "operationId": "delete_api_skills_id",
+        "description": "\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "无响应体"
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/agents": {
+      "get": {
+        "summary": "列出本班智能体（学生只见启用项）",
+        "operationId": "get_api_agents",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Agent"
+                      }
+                    }
+                  },
+                  "required": [
+                    "agents"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      },
+      "post": {
+        "summary": "教师创建智能体并绑定本班技能和材料",
+        "operationId": "post_api_agents",
+        "description": "\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "skill_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{32}$"
+                    }
+                  },
+                  "material_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{32}$"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "prompt",
+                  "enabled",
+                  "skill_ids",
+                  "material_ids"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}": {
+      "get": {
+        "summary": "读取本班智能体",
+        "operationId": "get_api_agents_id",
+        "description": "学生读取停用、外班或不存在的智能体均返回相同的404。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "教师更新智能体提示词和绑定关系",
+        "operationId": "put_api_agents_id",
+        "description": "\n仅本班教师可写；角色与班级以数据库为准。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "教师配置"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "skill_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{32}$"
+                    }
+                  },
+                  "material_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{32}$"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "prompt",
+                  "enabled",
+                  "skill_ids",
+                  "material_ids"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations": {
+      "get": {
+        "summary": "列出我在本班的会话",
+        "operationId": "get_api_conversations",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversations": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Conversation"
+                      }
+                    }
+                  },
+                  "required": [
+                    "conversations"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "会话"
+        ]
+      },
+      "post": {
+        "summary": "用启用智能体新建个人会话",
+        "operationId": "post_api_conversations",
+        "description": "必须指定本班启用智能体；创建后不可改选。会话始终只允许所属用户读取。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "会话"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agent_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$"
+                  }
+                },
+                "required": [
+                  "agent_id"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{id}": {
+      "get": {
+        "summary": "读取我的会话及历史状态",
+        "operationId": "get_api_conversations_id",
+        "description": "\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conversation": {
+                      "$ref": "#/components/schemas/Conversation"
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Message"
+                      }
+                    }
+                  },
+                  "required": [
+                    "conversation",
+                    "messages"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "会话"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/conversations/{id}/messages": {
+      "post": {
+        "summary": "发送问题并真正流式生成",
+        "operationId": "post_api_conversations_id_messages",
+        "description": "依次 meta、delta(多次)、done。每轮按绑定技能的适用条件路由最多一条，只在智能体绑定的材料中检索；前4片再过滤空正文和技能资料主题。无证据仍调用模型回答，但citations为空且不允许输出虚构编号。流前用JSON错误；流后error终止，HTTP仍200且无done。并发发送409。不自动重试。停止/断连后读详情确认failed/cancelled。\nAuthorization: Bearer <JWT>；JWT 有效期30分钟，仅内存保存。写入请求还需 Origin 与 APP_ORIGIN/DEV_ORIGIN 一致（同源浏览器自动发送）。",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "event: meta\ndata: {\"turn_id\":\"...\",\"status\":\"ok\",\"skill_name\":null,\"citations\":[],\"index_status\":{}}\n\nevent: delta\ndata: {\"text\":\"先看已知条件。\"}\n\nevent: done\ndata: {\"turn_id\":\"...\",\"message_id\":\"...\",\"status\":\"completed\"}\n\n"
+              }
+            }
+          },
+          "400": {
+            "description": "参数、配置或技能源文本无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录、令牌过期/撤销/篡改",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "角色或请求来源不允许",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到资源；越权与不存在同体",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "班级不唯一或会话并发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "会话"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "x-sse-events": {
+          "meta": "turn_id/status(ok)/agent_id/skill_name/skill(对象或null)/citations/index_status",
+          "delta": "text",
+          "done": "turn_id/message_id/status(completed)",
+          "error": "turn_id/code/message；流后HTTP仍200，终止且不发done"
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "读取 OpenAPI",
+        "operationId": "get_openapi.json",
+        "description": "",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      }
+    },
+    "/swagger/": {
+      "get": {
+        "summary": "打开本机 Swagger UI",
+        "operationId": "get_swagger",
+        "description": "无需登录；静态资源随镜像提供。Authorize 后可试调受保护接口，禁用令牌持久化。",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      }
+    },
+    "/swagger/index.html": {
+      "get": {
+        "summary": "打开本机 Swagger UI",
+        "operationId": "get_swagger_index.html",
+        "description": "无需登录；静态资源随镜像提供。Authorize 后可试调受保护接口，禁用令牌持久化。",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库、检索或模型暂时不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "系统与认证"
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Class": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name"
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "teacher",
+              "student"
+            ]
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Class"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "displayName",
+          "role",
+          "classes"
+        ]
+      },
+      "Login": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ]
+          },
+          "expires_in": {
+            "type": "integer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "user"
+        ]
+      },
+      "Hit": {
+        "type": "object",
+        "properties": {
+          "material_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "material_title": {
+            "type": "string"
+          },
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "chunk_index": {
+            "type": "integer"
+          },
+          "start_char": {
+            "type": "integer"
+          },
+          "end_char": {
+            "type": "integer"
+          },
+          "offset_basis": {
+            "type": "string",
+            "enum": [
+              "original",
+              "processed"
+            ]
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "material_url": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "keyword_score": {
+            "type": "number",
+            "nullable": true
+          },
+          "keyword_rank": {
+            "type": "integer",
+            "nullable": true
+          },
+          "vector_score": {
+            "type": "number",
+            "nullable": true
+          },
+          "vector_rank": {
+            "type": "integer",
+            "nullable": true
+          },
+          "rrf_score": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "material_id",
+          "material_title",
+          "chunk_id",
+          "chunk_index",
+          "start_char",
+          "end_char",
+          "offset_basis",
+          "excerpt",
+          "material_url",
+          "score",
+          "keyword_score",
+          "keyword_rank",
+          "vector_score",
+          "vector_rank",
+          "rrf_score"
+        ]
+      },
+      "Search": {
+        "type": "object",
+        "properties": {
+          "hits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            }
+          },
+          "message": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "keyword",
+              "vector",
+              "hybrid"
+            ]
+          },
+          "query_vector": {
+            "type": "object",
+            "properties": {
+              "generated": {
+                "type": "boolean"
+              },
+              "dimension": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "generated",
+              "dimension"
+            ]
+          },
+          "index_status": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          }
+        },
+        "required": [
+          "hits",
+          "message",
+          "mode",
+          "query_vector",
+          "index_status"
+        ]
+      },
+      "Material": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "txt",
+              "md"
+            ]
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uploaderName": {
+            "type": "string"
+          },
+          "index_state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "indexing",
+              "ready",
+              "failed"
+            ]
+          },
+          "index_error": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "type",
+          "sizeBytes",
+          "createdAt",
+          "uploaderName",
+          "index_state",
+          "index_error"
+        ]
+      },
+      "Skill": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "knowledge_search"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "trigger",
+          "subject",
+          "description",
+          "enabled",
+          "source",
+          "tools"
+        ]
+      },
+      "Agent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "skill_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          },
+          "material_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prompt",
+          "enabled",
+          "skill_ids",
+          "material_ids"
+        ]
+      },
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "title",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "turn_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "generating",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            }
+          },
+          "skill_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "turn_id",
+          "role",
+          "content",
+          "status",
+          "citations",
+          "skill_name",
+          "created_at"
+        ]
+      },
+      "Prompt": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "ChunkOptions": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "custom",
+              "hierarchy"
+            ],
+            "default": "auto"
+          },
+          "max_length": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 2000
+          },
+          "overlap_ratio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.5
+          },
+          "delimiter": {
+            "type": "string",
+            "enum": [
+              "newline",
+              "blankline",
+              "period"
+            ]
+          },
+          "remove_urls": {
+            "type": "boolean"
+          },
+          "remove_emails": {
+            "type": "boolean"
+          },
+          "collapse_whitespace": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  }
+}

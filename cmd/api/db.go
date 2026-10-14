@@ -17,6 +17,15 @@ import (
 //go:embed schema.sql
 var schema string
 
+//go:embed retrieval-schema.sql
+var retrievalSchema string
+
+//go:embed conversation-schema.sql
+var conversationSchema string
+
+//go:embed agents-schema.sql
+var agentsSchema string
+
 func newID() string {
 	b := make([]byte, 16)
 	if _, e := rand.Read(b); e != nil {
@@ -67,21 +76,71 @@ func migrate(db *sql.DB) error {
 	if e != nil {
 		return e
 	}
-	if version > 1 {
+	if version > 5 {
 		return errors.New("不支持的迁移版本")
 	}
-	if version == 1 {
+	if version == 5 {
 		return nil
 	}
-	for _, statement := range strings.Split(schema, ";") {
-		if strings.TrimSpace(statement) == "" {
-			continue
+	if version < 1 {
+		for _, statement := range strings.Split(schema, ";") {
+			if strings.TrimSpace(statement) == "" {
+				continue
+			}
+			if _, e = conn.ExecContext(ctx, statement); e != nil {
+				return e
+			}
 		}
-		if _, e = conn.ExecContext(ctx, statement); e != nil {
+		if _, e = conn.ExecContext(ctx, "INSERT INTO schema_versions VALUES(1)"); e != nil {
 			return e
 		}
 	}
-	_, e = conn.ExecContext(ctx, "INSERT INTO schema_versions VALUES(1)")
+	if _, e = conn.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS revoked_tokens(jti CHAR(32) PRIMARY KEY,expires_at DATETIME(6) NOT NULL,INDEX(expires_at)) ENGINE=InnoDB"); e != nil {
+		return e
+	}
+	_, e = conn.ExecContext(ctx, "INSERT IGNORE INTO schema_versions VALUES(2)")
+	if e != nil {
+		return e
+	}
+	for _, statement := range strings.Split(retrievalSchema, ";") {
+		if strings.TrimSpace(statement) != "" {
+			if _, e = conn.ExecContext(ctx, statement); e != nil {
+				return e
+			}
+		}
+	}
+	_, e = conn.ExecContext(ctx, "INSERT IGNORE INTO schema_versions VALUES(3)")
+	if e != nil {
+		return e
+	}
+	for _, statement := range strings.Split(conversationSchema, ";") {
+		if strings.TrimSpace(statement) != "" {
+			if _, e = conn.ExecContext(ctx, statement); e != nil {
+				return e
+			}
+		}
+	}
+	_, e = conn.ExecContext(ctx, "INSERT IGNORE INTO schema_versions VALUES(4)")
+	if e != nil {
+		return e
+	}
+	for _, statement := range strings.Split(agentsSchema, ";") {
+		if strings.TrimSpace(statement) != "" {
+			if _, e = conn.ExecContext(ctx, statement); e != nil {
+				return e
+			}
+		}
+	}
+	var exists int
+	if e = conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='conversations' AND column_name='agent_id'").Scan(&exists); e != nil {
+		return e
+	}
+	if exists == 0 {
+		if _, e = conn.ExecContext(ctx, "ALTER TABLE conversations ADD COLUMN agent_id CHAR(32) NULL, ADD CONSTRAINT conversations_agent_fk FOREIGN KEY(agent_id) REFERENCES tutor_agents(id) ON DELETE SET NULL"); e != nil {
+			return e
+		}
+	}
+	_, e = conn.ExecContext(ctx, "INSERT IGNORE INTO schema_versions VALUES(5)")
 	return e
 }
 func seed(db *sql.DB) error {

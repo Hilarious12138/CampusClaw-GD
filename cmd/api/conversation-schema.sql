@@ -1,0 +1,31 @@
+CREATE TABLE IF NOT EXISTS class_prompts (
+ class_id CHAR(32) PRIMARY KEY, body TEXT NOT NULL, updated_by CHAR(32) NULL,
+ updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+ FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS skills (
+ id CHAR(32) PRIMARY KEY, class_id CHAR(32) NOT NULL,
+ source TEXT NOT NULL, name VARCHAR(32) NOT NULL, `trigger` VARCHAR(120) NOT NULL,
+ subject VARCHAR(120) NOT NULL, description TEXT NOT NULL, enabled BOOLEAN NOT NULL,
+ updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+ UNIQUE KEY(class_id,name), FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS conversations (
+ id CHAR(32) PRIMARY KEY, class_id CHAR(32) NOT NULL, user_id CHAR(32) NOT NULL,
+ skill_id CHAR(32) NULL, title VARCHAR(100) NOT NULL DEFAULT '新的提问',
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ INDEX(user_id,class_id,updated_at),
+ FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE,
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS conversation_messages (
+ id CHAR(32) PRIMARY KEY, conversation_id CHAR(32) NOT NULL, turn_id CHAR(32) NOT NULL,
+ role ENUM('user','assistant') NOT NULL, content TEXT NOT NULL,
+ status ENUM('generating','completed','failed','cancelled') NOT NULL,
+ citations JSON NOT NULL, config_snapshot JSON NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ UNIQUE KEY(turn_id,role), INDEX(conversation_id,created_at),
+ FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

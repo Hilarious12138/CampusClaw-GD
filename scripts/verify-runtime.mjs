@@ -29,30 +29,41 @@ const sql = (q, admin = false) =>
       "db",
       "sh",
       "-c",
-      admin ? 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -N -uroot "$MYSQL_DATABASE"' : 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -N -u"$MYSQL_USER" "$MYSQL_DATABASE"',
+      admin
+        ? 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -N -uroot "$MYSQL_DATABASE"'
+        : 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -N -u"$MYSQL_USER" "$MYSQL_DATABASE"',
     ],
     { input: q, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
   ).trim();
 const wait = async (check, seconds = 60) => {
   for (let i = 0; i < seconds; i++) {
-    if (await check()) return;
+    try { if (await check()) return; } catch { /* Container restart can temporarily close the socket. */ }
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw Error("等待服务超时");
 };
+process.on("uncaughtException",()=>{console.error("运行验证失败；请检查服务状态。凭证及请求头已省略。");process.exit(1)});
 const origin = env.APP_ORIGIN;
-const c = await request.newContext({
+let c = await request.newContext({
   baseURL: origin,
   extraHTTPHeaders: { Origin: origin },
 });
-assert.equal(
-  (
-    await c.post("/api/auth/login", {
-      data: { username: "teacher_a", password: env.SEED_TEACHER_A_PASSWORD },
-    })
-  ).status(),
-  200,
-);
+async function authenticate() {
+  const response = await c.post("/api/auth/login", {
+    data: { username: "teacher_a", password: env.SEED_TEACHER_A_PASSWORD },
+  });
+  assert.equal(response.status(), 200);
+  const data = await response.json();
+  await c.dispose();
+  c = await request.newContext({
+    baseURL: origin,
+    extraHTTPHeaders: {
+      Origin: origin,
+      Authorization: `Bearer ${data.access_token}`,
+    },
+  });
+}
+await authenticate();
 const me = await (await c.get("/api/me")).json(),
   cid = me.classes[0].id,
   url = `/api/classes/${cid}/materials`;
@@ -67,10 +78,10 @@ assert.equal(
 const before = counts();
 try {
   sql(
-    "CREATE TRIGGER verify_reject BEFORE INSERT ON material_contents FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='verification rollback';", true,
+    "CREATE TRIGGER verify_reject BEFORE INSERT ON material_contents FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='verification rollback';",
+    true,
   );
   const r = await c.post(url, {
-    headers: { "X-CSRF-Token": me.csrfToken },
     multipart: {
       file: {
         name: "回滚验证.txt",
@@ -116,12 +127,10 @@ try {
     `UPDATE users SET display_name='${originalName.replaceAll("'", "''")}' WHERE username='teacher_a';`,
   );
 }
-sql(
-  "UPDATE sessions SET expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND WHERE user_id=(SELECT id FROM users WHERE username='teacher_a');",
-);
+assert.equal((await c.post("/api/auth/logout")).status(), 204);
 assert.equal((await c.get("/api/me")).status(), 401);
 console.log(
-  "通过：数据库密码哈希、事务失败回滚、临时文件清理、种子幂等、会话过期",
+  "通过：数据库密码哈希、事务失败回滚、临时文件清理、种子幂等、JWT 撤销",
 );
 const browser = await chromium.launch({ channel: "chrome" });
 const page = await browser.newPage();
@@ -169,14 +178,7 @@ dc("down");
 dc("up", "-d");
 await wait(async () => (await c.get("/health")).status() === 200);
 assert.equal(counts(), before);
-assert.equal(
-  (
-    await c.post("/api/auth/login", {
-      data: { username: "teacher_a", password: env.SEED_TEACHER_A_PASSWORD },
-    })
-  ).status(),
-  200,
-);
+await authenticate();
 assert.ok((await (await c.get(url)).json()).materials.length >= 2);
 console.log("通过：数据库恢复及 Compose down/up 后账号、上传材料均保留");
 await c.dispose();

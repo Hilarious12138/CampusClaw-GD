@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime"
@@ -24,13 +25,15 @@ type SchoolClass struct {
 	Name string `json:"name"`
 }
 type Material struct {
-	ID        string    `json:"id"`
-	Filename  string    `json:"filename"`
-	Type      string    `json:"type"`
-	Size      int       `json:"sizeBytes"`
-	CreatedAt time.Time `json:"createdAt"`
-	Uploader  string    `json:"uploaderName"`
-	Body      string    `json:"body,omitempty"`
+	ID         string    `json:"id"`
+	Filename   string    `json:"filename"`
+	Type       string    `json:"type"`
+	Size       int       `json:"sizeBytes"`
+	CreatedAt  time.Time `json:"createdAt"`
+	Uploader   string    `json:"uploaderName"`
+	IndexState string    `json:"index_state"`
+	IndexError string    `json:"index_error"`
+	Body       string    `json:"body,omitempty"`
 }
 
 func (a *App) class(r *http.Request, u User) (SchoolClass, error) {
@@ -54,7 +57,7 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	rows, e := a.db.QueryContext(r.Context(), `SELECT m.id,m.filename,m.type,m.size_bytes,m.created_at,u.display_name FROM materials m JOIN class_memberships cm ON cm.class_id=m.class_id JOIN users u ON u.id=m.uploader_id WHERE cm.user_id=? AND m.class_id=? ORDER BY m.created_at DESC,m.id`, u.ID, c.ID)
+	rows, e := a.db.QueryContext(r.Context(), `SELECT m.id,m.filename,m.type,m.size_bytes,m.created_at,u.display_name,COALESCE(i.state,'pending'),COALESCE(i.last_error,'') FROM materials m LEFT JOIN material_indexes i ON i.material_id=m.id JOIN class_memberships cm ON cm.class_id=m.class_id JOIN users u ON u.id=m.uploader_id WHERE cm.user_id=? AND m.class_id=? ORDER BY m.created_at DESC,m.id`, u.ID, c.ID)
 	if e != nil {
 		return e
 	}
@@ -62,7 +65,7 @@ func (a *App) list(w http.ResponseWriter, r *http.Request) error {
 	items := []Material{}
 	for rows.Next() {
 		var m Material
-		if e = rows.Scan(&m.ID, &m.Filename, &m.Type, &m.Size, &m.CreatedAt, &m.Uploader); e != nil {
+		if e = rows.Scan(&m.ID, &m.Filename, &m.Type, &m.Size, &m.CreatedAt, &m.Uploader, &m.IndexState, &m.IndexError); e != nil {
 			return e
 		}
 		items = append(items, m)
@@ -82,7 +85,7 @@ func (a *App) readMaterial(r *http.Request, u User) (Material, []byte, error) {
 	if !idPattern.MatchString(cid) || !idPattern.MatchString(id) {
 		return m, nil, fail(404, "未找到班级或材料。")
 	}
-	e := a.db.QueryRowContext(r.Context(), `SELECT m.id,m.filename,m.type,m.size_bytes,m.created_at,u.display_name,mc.body,mc.original FROM materials m JOIN material_contents mc ON mc.material_id=m.id JOIN class_memberships cm ON cm.class_id=m.class_id JOIN users u ON u.id=m.uploader_id WHERE cm.user_id=? AND m.class_id=? AND m.id=?`, u.ID, cid, id).Scan(&m.ID, &m.Filename, &m.Type, &m.Size, &m.CreatedAt, &m.Uploader, &m.Body, &raw)
+	e := a.db.QueryRowContext(r.Context(), `SELECT m.id,m.filename,m.type,m.size_bytes,m.created_at,u.display_name,mc.body,mc.original,COALESCE(i.state,'pending'),COALESCE(i.last_error,'') FROM materials m LEFT JOIN material_indexes i ON i.material_id=m.id JOIN material_contents mc ON mc.material_id=m.id JOIN class_memberships cm ON cm.class_id=m.class_id JOIN users u ON u.id=m.uploader_id WHERE cm.user_id=? AND m.class_id=? AND m.id=?`, u.ID, cid, id).Scan(&m.ID, &m.Filename, &m.Type, &m.Size, &m.CreatedAt, &m.Uploader, &m.Body, &raw, &m.IndexState, &m.IndexError)
 	if errors.Is(e, sql.ErrNoRows) {
 		e = fail(404, "未找到班级或材料。")
 	}
@@ -141,7 +144,17 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 	if e != nil {
 		return e
 	}
-	if e = a.csrf(r, u); e != nil {
+	if e = a.checkOrigin(r); e != nil {
+		return e
+	}
+	options := ChunkOptions{Strategy: "auto"}
+	if raw := r.URL.Query().Get("options"); raw != "" {
+		if len(raw) > 2048 || json.Unmarshal([]byte(raw), &options) != nil {
+			return fail(400, "切片参数无效。")
+		}
+	}
+	options, e = options.normalized()
+	if e != nil {
 		return e
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxFile+65536)
@@ -209,6 +222,10 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	if _, e = tx.ExecContext(r.Context(), "INSERT INTO material_contents VALUES(?,?,?)", id, body, raw); e != nil {
+		return e
+	}
+	encodedOptions, _ := json.Marshal(options)
+	if _, e = tx.ExecContext(r.Context(), "INSERT INTO material_indexes(material_id,options,processed_text) VALUES(?,?,'')", id, encodedOptions); e != nil {
 		return e
 	}
 	if e = tx.Commit(); e != nil {

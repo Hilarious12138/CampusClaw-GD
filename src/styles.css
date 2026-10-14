@@ -497,3 +497,93 @@ header b {
     padding: 16px;
   }
 }
+
+.retrieval {
+  background: #fff;
+  border: 1px solid #dce8e3;
+  border-radius: 16px;
+  padding: 24px;
+  margin: 28px 0;
+}
+.retrieval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+}
+.retrieval select,
+.strategy select {
+  padding: 12px;
+  border: 1px solid #c8d9d2;
+  border-radius: 8px;
+  background: white;
+  max-width: 100%;
+}
+.retrieval label {
+  display: block;
+}
+.retrieval input {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #c8d9d2;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+.retrieval small,
+.strategy small,
+.hits small {
+  display: block;
+  color: #678278;
+  line-height: 1.6;
+}
+.hits article {
+  padding: 20px 0;
+  border-top: 1px solid #e4ece8;
+  margin-top: 16px;
+}
+.hits p,
+.answer p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+.answer {
+  background: #eff7f3;
+  border-radius: 12px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.strategy {
+  border: 1px solid #dce8e3;
+  border-radius: 10px;
+  margin: 18px 0;
+  padding: 14px;
+}
+.custom-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.custom-options .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.custom-options .check input {
+  width: auto;
+  margin: 0;
+}
+.reindex {
+  border-top: 1px solid #dce8e3;
+  margin-top: 20px;
+}
+.modal {
+  max-height: 90vh;
+  overflow: auto;
+}
+
+aside .nav-item{display:block;width:100%;text-align:left;margin-bottom:10px}.swagger-link{display:block;font-size:13px;color:#53766a;padding:14px}.assistant-space{margin:28px 0}.teacher-config{padding:20px;background:white;border:1px solid #dce8e3;border-radius:12px;margin-bottom:20px}.teacher-config summary{cursor:pointer;font-weight:600;color:#176b58}.teacher-config label{display:block;margin:14px 0 8px}.assistant-space textarea{display:block;width:100%;border:1px solid #c8d9d2;border-radius:8px;padding:12px;margin:8px 0;font:inherit;line-height:1.7;resize:vertical}.assistant-space select{width:100%;padding:12px;border:1px solid #c8d9d2;border-radius:8px;background:white;margin:10px 0}.chat-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:20px}.chat-list,.chat-main{background:white;border:1px solid #dce8e3;border-radius:12px;padding:18px;min-width:0}.chat-list>button{display:block;width:100%;text-align:left;margin:10px 0;overflow-wrap:anywhere}.selected-conversation{background:#e8f4ed;color:#176b58}.chat-messages{max-height:620px;overflow:auto}.chat-message{padding:18px;border:1px solid #e2ebe6;border-radius:12px;margin-bottom:16px;overflow-wrap:anywhere}.chat-message.user{background:#f2f7f4}.chat-message p{white-space:pre-wrap;line-height:1.8}.chat-message small,.chat-compose small{display:block;color:#6c8379;font-size:12px;line-height:1.7}.chat-citation{padding:12px 0;border-top:1px solid #dce8e3;margin-top:10px;font-size:13px}.chat-compose{border-top:1px solid #dce8e3;padding-top:16px}.chat-compose button{margin:8px 10px 10px 0}@media(max-width:850px){.chat-layout{grid-template-columns:1fr}.chat-list{max-height:250px;overflow:auto}}
+.teacher-config input:not([type="checkbox"]){display:block;width:100%;border:1px solid #c8d9d2;border-radius:8px;padding:12px;font:inherit}.teacher-config fieldset{border:1px solid #dce8e3;border-radius:8px;margin:14px 0;max-height:180px;overflow:auto}.teacher-config fieldset label{display:inline-flex;align-items:center;gap:7px;margin:7px 16px 7px 0}.teacher-config input[type="checkbox"]{accent-color:#176b58}.teacher-config h3{margin-top:24px}
